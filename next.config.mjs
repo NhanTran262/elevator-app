@@ -8,6 +8,6 @@ const nextConfig = {
     eslint: {
         ignoreDuringBuilds: true // turn off it when develop to check syntax
     },
-};git
+};
 
 export default nextConfig;
