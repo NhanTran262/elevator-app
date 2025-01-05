@@ -1,0 +1,74 @@
+/* styles/panel.css */
+.panel {
+    border: 1px solid #ccc;
+    padding: 5px;
+    margin: 5px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 150px;
+}
+
+.buttons-left {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.buttons-left button {
+    margin: 0 2px;
+    cursor: pointer;
+}
+
+.buttons-right {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+.buttons-right button {
+    margin-top: 2px;
+    margin-bottom: 2px;
+    cursor: pointer;
+}
+
+.icon {
+    display: block;
+    margin: 2px 0;
+    width: 8px;
+    height: 8px;
+}
+
+.elevator-icon {
+    width: 23px;
+    height: 23px;
+}
+
+.floor {
+    margin-left: 5px;
+    font-size: 14px;
+}
+
+.floor button {
+    cursor: pointer;
+}
+
+.container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.elevator {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin: 0 10px;
+}
+
+.elevator:last-child {
+    margin-right: 0;
+}

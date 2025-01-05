@@ -1,0 +1,173 @@
+name: Build and Deploy Next.js
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: Build Next.js
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect package manager
+        id: detect-package-manager
+        run: |
+          if [ -f "${{ github.workspace }}/yarn.lock" ]; then
+            echo "manager=yarn" >> $GITHUB_OUTPUT
+            echo "command=install" >> $GITHUB_OUTPUT
+            echo "runner=yarn" >> $GITHUB_OUTPUT
+            exit 0
+          elif [ -f "${{ github.workspace }}/package.json" ]; then
+            echo "manager=npm" >> $GITHUB_OUTPUT
+            echo "command=ci" >> $GITHUB_OUTPUT
+            echo "runner=npx --no-install" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "Unable to determine package manager"
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: ${{ steps.detect-package-manager.outputs.manager }}
+
+      - name: Restore cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}-
+
+      - name: Install dependencies
+        run: ${{ steps.detect-package-manager.outputs.manager }} ${{ steps.detect-package-manager.outputs.command }}
+
+      - name: Build with Next.js
+        run: ${{ steps.detect-package-manager.outputs.runner }} next build
+
+  build-docker-image:
+    name: Build Docker Image and Push to DockerHub
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.base_ref == 'main')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect package manager
+        id: detect-package-manager
+        run: |
+          if [ -f "${{ github.workspace }}/yarn.lock" ]; then
+            echo "manager=yarn" >> $GITHUB_OUTPUT
+            echo "command=install" >> $GITHUB_OUTPUT
+            echo "runner=yarn" >> $GITHUB_OUTPUT
+            exit 0
+          elif [ -f "${{ github.workspace }}/package.json" ]; then
+            echo "manager=npm" >> $GITHUB_OUTPUT
+            echo "command=ci" >> $GITHUB_OUTPUT
+            echo "runner=npx --no-install" >> $GITHUB_OUTPUT
+            exit 0
+          else
+            echo "Unable to determine package manager"
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: ${{ steps.detect-package-manager.outputs.manager }}
+
+      - name: Restore cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}-
+
+      - name: Install dependencies
+        run: ${{ steps.detect-package-manager.outputs.manager }} ${{ steps.detect-package-manager.outputs.command }}
+
+      - name: Build with Next.js
+        run: ${{ steps.detect-package-manager.outputs.runner }} next build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./.next/standalone
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Check and re-tag existing image
+        id: check_image
+        run: |
+          if docker manifest inspect ${{ secrets.DOCKER_HUB_USERNAME }}/elevator:FE-latest > /dev/null 2>&1; then
+            CURRENT_VERSION=$(curl -s "https://hub.docker.com/repository/docker/${{ secrets.DOCKER_HUB_USERNAME }}/elevator/tags/" | jq -r '.results[] 
+            | select(.name | startswith("FE-v")) | .name' | sort -V | tail -n 1)
+            if [ -z "$CURRENT_VERSION" ]; then
+              NEW_VERSION="FE-v.0.0.1"
+            else
+              LAST_NUM=$(echo $CURRENT_VERSION | grep -o '[0-9]*$')
+              NEW_NUM=$((LAST_NUM + 1))
+              NEW_VERSION="FE-v.0.0.$NEW_NUM"
+            fi
+              docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/elevator:FE-latest
+              docker tag  ${{ secrets.DOCKER_HUB_USERNAME }}/elevator:FE-latest ${{ secrets.DOCKER_HUB_USERNAME }}/elevator:$NEW_VERSION
+              docker push ${{ secrets.DOCKER_HUB_USERNAME }}/elevator:$NEW_VERSION
+          fi
+
+      - name: Build and Push to Docker Hub
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/elevator:FE-latest
+
+  deploy:
+    name: Deploy to Ubuntu server
+    runs-on: ubuntu-latest
+    needs: [ build-docker-image ]
+    steps:
+      - name: Deploying
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            cd /elevator
+            cp compose.yaml compose.yaml.bak
+            sed -i "s/MYSQL_HOST=.*/MYSQL_HOST=${{ secrets.MYSQL_HOST }}/" compose.yaml
+            sed -i "s/MYSQL_USER=.*/MYSQL_USER=${{ secrets.MYSQL_USER }}/" compose.yaml
+            sed -i "s/MYSQL_PASSWORD=.*/MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}/" compose.yaml
+            sed -i "s/MYSQL_DB=.*/MYSQL_DB=${{ secrets.MYSQL_DB }}/" compose.yaml
+            sed -i "s/DOMAIN=.*/DOMAIN=${{ secrets.DOMAIN }}/" compose.yaml
+            docker compose pull
+            docker compose down
+            docker compose up -d
+            docker image prune -f
+            mv compose.yaml.bak compose.yaml
+            
