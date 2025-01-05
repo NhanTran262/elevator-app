@@ -124,8 +124,7 @@ jobs:
         id: check_image
         run: |
           if docker manifest inspect ${{ secrets.DOCKER_HUB_USERNAME }}/elevator:FE-latest > /dev/null 2>&1; then
-            CURRENT_VERSION=$(curl -s "https://hub.docker.com/repository/docker/${{ secrets.DOCKER_HUB_USERNAME }}/elevator/tags/" | jq -r '.results[] 
-            | select(.name | startswith("FE-v")) | .name' | sort -V | tail -n 1)
+            CURRENT_VERSION=$(curl -s "https://registry.hub.docker.com/v2/repositories/${{ secrets.DOCKER_HUB_USERNAME }}/elevator/tags?page_size=100" | jq -r '.results[] | select(.name | startswith("FE-v")) | .name' | sort -V | tail -n 1)
             if [ -z "$CURRENT_VERSION" ]; then
               NEW_VERSION="FE-v.0.0.1"
             else
