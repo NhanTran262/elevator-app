@@ -5,54 +5,37 @@ import {callElevator, getAllElevator, selectFloor} from "@/service/elevatorAPI";
 import {toast} from "react-toastify";
 
 export default function Elevator({floor, elevator}) {
-    const [floorData, setFloorData] = useState(floor);
-    const [isMovingUp, setIsMovingUp] = useState(elevator?.isMovingUp);
     const [currentFloor, setCurrentFloor] = useState(elevator.currentFloor);
     const [targetFloor, setTargetFloor] = useState(null);
     const [elevatorId, setElevatorId] = useState(null);
     const [elevatorCurrentId, setElevatorCurrentId] = useState(null);
     const [isDoorOpen, setIsDoorOpen] = useState(elevator?.isDoorOpen);
     const [isHolding, setIsHolding] = useState(false)
-    const [isMoving, setIsMoving] = useState(false)
 
-    console.log(targetFloor);
-    console.log(currentFloor);
-    console.log(elevatorId);
-    console.log(elevatorCurrentId);
     const fetchElevators = async () => {
         const elevators = await getAllElevator();
         const elevatorData = elevators.data?.find(elevator => elevator.id === elevatorId);
-
-        // Tính khoảng cách và hướng di chuyển
         const distance = targetFloor - elevatorData.currentFloor;
         const direction = distance > 0;
-        setIsMovingUp(direction);
 
-        // Tạo animation di chuyển
+
         const moveElevator = async () => {
-            let currentPosition = elevatorData.currentFloor;
-
-            const moveOneFloor = () => {
-                return new Promise(resolve => {
+            let currentPosition = currentFloor;
+            while (currentPosition !== targetFloor) {
+                if (currentPosition < targetFloor) {
+                    currentPosition++;
+                } else {
+                    currentPosition--;
+                }
+                await new Promise(resolve => {
                     setTimeout(() => {
-                        if (direction) {
-                            currentPosition++;
-                        } else {
-                            currentPosition--;
-                        }
-                        setCurrentFloor(currentPosition);
-                        resolve();
+                        setCurrentFloor(floor);
                         toast.info(`Elevator ${elevatorId} to floor ${currentPosition}`);
-                    }, 2000);
+                        resolve();
+                    }, 1000);
                 });
-            };
-
-            // Di chuyển qua từng tầng cho đến khi đến targetFloor
-            while (direction ? currentPosition < targetFloor : currentPosition > targetFloor) {
-                await moveOneFloor();
             }
 
-            // Khi đến nơi
             if (elevatorId === elevatorCurrentId) {
                 setIsDoorOpen(true);
                 toast.success(`Elevator ${elevatorCurrentId} arrived at floor ${targetFloor}`);
@@ -69,7 +52,6 @@ export default function Elevator({floor, elevator}) {
         if (targetFloor !== null && elevatorId === elevatorCurrentId) {
             fetchElevators().then();
         }
-
     }, [targetFloor, elevatorId, elevatorCurrentId]);
 
     useEffect(() => {
@@ -87,7 +69,6 @@ export default function Elevator({floor, elevator}) {
 
     const fetchCallElevator = async (request) => {
         const response = await callElevator(request)
-        console.log(response)
         setElevatorId(response.data.id)
         setElevatorCurrentId(response.data.id)
         setTargetFloor(response.data.targetFloor)
@@ -100,14 +81,12 @@ export default function Elevator({floor, elevator}) {
             targetFloor: floor.floorNumber,
             direction: direction,
         }
-        console.log(request)
         fetchCallElevator(request).then()
 
     }
 
     const fetchSelectFloor = async (request) => {
         const response = await selectFloor(request)
-        console.log(response)
         setElevatorId(response.data.id)
         setElevatorCurrentId(response.data.id)
         setTargetFloor(response.data.targetFloor)
@@ -119,14 +98,8 @@ export default function Elevator({floor, elevator}) {
             targetFloor: floor.floorNumber,
             direction: currentFloor < floor.floorNumber,
         }
-        console.log(request)
         fetchSelectFloor(request).then()
     }
-
-    const handleDoorOpen = () => {
-        setIsDoorOpen(true);
-        console.log(`Door of elevator ${elevator.id} is opened.`);
-    };
 
     const handleMouseUp = () => {
         setIsHolding(false);
